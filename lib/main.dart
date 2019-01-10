@@ -11,7 +11,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Spring Slider',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primaryColor: Color(0xFFFF6688), scaffoldBackgroundColor: Colors.white),
+      theme: ThemeData(
+          primaryColor: Color(0xFFFF6688),
+          scaffoldBackgroundColor: Colors.white),
       home: MyHomePage(),
     );
   }
@@ -33,7 +35,8 @@ class _MyHomePageState extends State<MyHomePage> {
           style: TextStyle(
               fontSize: 12.0,
               fontWeight: FontWeight.bold,
-              color: isOnlight ? Theme.of(context).primaryColor : Colors.white)),
+              color:
+                  isOnlight ? Theme.of(context).primaryColor : Colors.white)),
       onPressed: () {},
     );
   }
@@ -91,26 +94,156 @@ class SpringSlider extends StatefulWidget {
 }
 
 class SpringSliderState extends State<SpringSlider> {
+  final double paddingTop = 50.0;
+  final double paddingBottom = 50.0;
+
+  double sliderPercent = 0.75;
+  double startDragY;
+  double startDragPercent;
+
+  void _onPanStart(DragStartDetails details) {
+    startDragY = details.globalPosition.dy;
+    startDragPercent = sliderPercent;
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    final dragDistance = startDragY - details.globalPosition.dy;
+    final sliderHeight = context.size.height;
+    final dragPercent = dragDistance / sliderHeight;
+
+    setState(() {
+      sliderPercent = startDragPercent + dragPercent;
+    });
+  }
+
+  void _onPanEnd(DragEndDetails details) {
+    setState(() {
+      startDragY = null;
+      startDragPercent = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return new Stack(
-      children: <Widget>[
-        new SliderMarks(
-            markCount: widget.markCount,
-            color: widget.positiveColor,
-            paddingTop: 50.0,
-            paddingBottom: 50.0),
-        new Container(
-          color: widget.positiveColor,
-        ),
-        new SliderMarks(
-            markCount: widget.markCount,
-            color: widget.negativeColor,
-            paddingTop: 50.0,
-            paddingBottom: 50.0
-        ),
-      ],
+    return GestureDetector(
+      onPanStart: _onPanStart,
+      onPanUpdate: _onPanUpdate,
+      onPanEnd: _onPanEnd,
+      child: new Stack(
+        children: <Widget>[
+          new SliderMarks(
+              markCount: widget.markCount,
+              color: widget.positiveColor,
+              paddingTop: paddingTop,
+              paddingBottom: paddingBottom),
+          // 用ClipPath强制把它移下去（sets what part of an element should be shown）
+          new ClipPath(
+            clipper: new SliderClipper(
+                sliderPercent: sliderPercent,
+                paddingBottom: paddingBottom,
+                paddingTop: paddingTop),
+            child: new Stack(
+              children: <Widget>[
+                new Container(
+                  color: widget.positiveColor,
+                ),
+                new SliderMarks(
+                    markCount: widget.markCount,
+                    color: widget.negativeColor,
+                    paddingTop: paddingTop,
+                    paddingBottom: paddingBottom),
+              ],
+            ),
+          ),
+
+          /// slider的文字
+          new Padding(
+            padding: EdgeInsets.only(top: 0.0, bottom: 0.0),
+            /* 这个行不通
+            child: new Stack(
+              children: <Widget>[
+                new Positioned(
+                  left: 30.0,
+                  top: MediaQuery.of(context).size.height / 2,
+                  child: new Text("Testing"),
+                ),
+                new Positioned(
+                  left: 30.0,
+                  top: MediaQuery.of(context).size.height / 2 + 50.0,
+                  child: new Text("Testing"),
+                )
+              ],
+            ),*/
+
+            // LayoutBuilder的原因是要他里面的BoxConstraints,LayoutBuilder侦测的是他所在这个Widget的长宽高ganbade
+            child: new LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final height = constraints.maxHeight;
+                final sliderY = height * (1.0 - sliderPercent);
+                final pointsYouNeed = (100 * (1.0 - sliderPercent)).round();
+                final pointsYouHave = 100 - pointsYouNeed;
+
+                return new Stack(
+                  children: <Widget>[
+                    new Positioned(
+                      left: 30.0,
+                      top: sliderY - 50.0,
+                      child: FractionalTranslation(
+                          translation: Offset(0.0, -1.0),
+                          child: new Points(
+                            points: pointsYouNeed,
+                            isAboveSlider: true,
+                            isPointsYouNeed: true,
+                            color: Theme.of(context).primaryColor,
+                          )),
+                    ),
+                    new Positioned(
+                      left: 30.0,
+                      top: sliderY + 50.0,
+                      child: new Points(
+                        points: pointsYouHave,
+                        isAboveSlider: false,
+                        isPointsYouNeed: false,
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          )
+        ],
+      ),
     );
+  }
+}
+
+/// Description: 分裂滑动界面为个界面（A widget that clips its child using self define shape.）
+class SliderClipper extends CustomClipper<Path> {
+  final double sliderPercent;
+  final double paddingTop;
+  final double paddingBottom;
+
+  SliderClipper({this.sliderPercent, this.paddingTop, this.paddingBottom});
+
+  @override
+  Path getClip(Size size) {
+    Path rect = new Path();
+
+    final top = paddingTop;
+    final bottom = size.height;
+    final height = bottom - paddingBottom - top;
+    final percentFromBottom = 1.0 - sliderPercent;
+
+    // 保留的部分
+    rect.addRect(new Rect.fromLTRB(
+        0.0, top + (percentFromBottom * height), size.width, bottom));
+    return rect;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) {
+    return true;
   }
 }
 
@@ -120,7 +253,8 @@ class SliderMarks extends StatelessWidget {
   final double paddingTop;
   final double paddingBottom;
 
-  SliderMarks({this.markCount, this.color, this.paddingTop, this.paddingBottom});
+  SliderMarks(
+      {this.markCount, this.color, this.paddingTop, this.paddingBottom});
 
   @override
   Widget build(BuildContext context) {
@@ -185,5 +319,56 @@ class SliderMarksPainter extends CustomPainter {
   @override
   bool shouldRepaint(CustomPainter oldDelegate) {
     return true;
+  }
+}
+
+/// 文字的具体显示方式
+class Points extends StatelessWidget {
+  final int points;
+  final bool isAboveSlider;
+  final bool isPointsYouNeed;
+  final Color color;
+
+  const Points(
+      {this.points, this.isAboveSlider, this.isPointsYouNeed, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = points / 100.0;
+    final pointTextSize = 30.0 + (70.0 * percent);
+    return new Row(
+      crossAxisAlignment:
+          isAboveSlider ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: <Widget>[
+        new FractionalTranslation(
+          translation: Offset(0.0, isAboveSlider ? 0.18 : -0.18),
+          child: new Text(
+            '$points',
+            style: new TextStyle(fontSize: pointTextSize, color: color),
+          ),
+        ),
+        new Padding(
+          padding: EdgeInsets.only(left: 8.0),
+          child: new Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              new Padding(
+                padding: EdgeInsets.only(bottom: 4.0),
+                child: new Text(
+                  "POINTS",
+                  style:
+                      new TextStyle(fontWeight: FontWeight.bold, color: color),
+                ),
+              ),
+              new Text(
+                isPointsYouNeed ? "YOU NEED" : "YOU HAVE",
+                style: TextStyle(fontWeight: FontWeight.bold, color: color),
+              ),
+            ],
+          ),
+        )
+      ],
+    );
   }
 }
