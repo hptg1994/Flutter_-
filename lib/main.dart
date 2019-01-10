@@ -96,10 +96,122 @@ class SpringSlider extends StatefulWidget {
 class SpringSliderState extends State<SpringSlider> {
   final double paddingTop = 50.0;
   final double paddingBottom = 50.0;
+  double sliderPercent = 0.5;
 
-  double sliderPercent = 0.75;
+  @override
+  Widget build(BuildContext context) {
+    return SliderDragger(
+      initialSliderPercent: sliderPercent,
+      onSliderChange: (double sliderPercent) {
+        setState(() {
+          this.sliderPercent = sliderPercent;
+        });
+      },
+      child: new Stack(
+        children: <Widget>[
+          new SliderMarks(
+              markCount: widget.markCount,
+              markColor: widget.positiveColor,
+              backgroundColor: widget.negativeColor,
+              paddingTop: paddingTop,
+              paddingBottom: paddingBottom),
+          // 用ClipPath强制把它移下去（sets what part of an element should be shown）
+          new SliderGoo(
+            sliderPercent: sliderPercent,
+            paddingBottom: paddingBottom,
+            paddingTop: paddingTop,
+            child: new SliderMarks(
+                markCount: widget.markCount,
+                markColor: widget.negativeColor,
+                backgroundColor: widget.positiveColor,
+                paddingTop: paddingTop,
+                paddingBottom: paddingBottom),
+          ),
+          new SliderPoints(
+            sliderPercent: sliderPercent,
+            paddingTop: paddingTop,
+            paddingBottom: paddingBottom,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SliderPoints extends StatelessWidget {
+  final double sliderPercent;
+  final double paddingTop;
+  final double paddingBottom;
+
+  const SliderPoints({this.sliderPercent, this.paddingTop, this.paddingBottom});
+
+  @override
+  Widget build(BuildContext context) {
+    /// slider的文字
+    return new Padding(
+      padding: EdgeInsets.only(top: 0.0, bottom: 0.0),
+      // LayoutBuilder的原因是要他里面的BoxConstraints,LayoutBuilder侦测的是他所在这个Widget的长宽高
+      child: new LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final height = constraints.maxHeight;
+          final sliderY = height * (1.0 - sliderPercent);
+          final pointsYouNeed = (100 * (1.0 - sliderPercent)).round();
+          final pointsYouHave = 100 - pointsYouNeed;
+
+          return new Stack(
+            children: <Widget>[
+              new Positioned(
+                left: 30.0,
+                top: sliderY - 50.0,
+                child: FractionalTranslation(
+                    translation: Offset(0.0, -1.0),
+                    child: new Points(
+                      points: pointsYouNeed,
+                      isAboveSlider: true,
+                      isPointsYouNeed: true,
+                      color: Theme.of(context).primaryColor,
+                    )),
+              ),
+              new Positioned(
+                left: 30.0,
+                top: sliderY + 50.0,
+                child: new Points(
+                  points: pointsYouHave,
+                  isAboveSlider: false,
+                  isPointsYouNeed: false,
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class SliderDragger extends StatefulWidget {
+  final Widget child;
+  final double initialSliderPercent;
+  final Function(double sliderPercent) onSliderChange;
+
+  const SliderDragger(
+      {this.child, this.onSliderChange, this.initialSliderPercent = 0.0});
+
+  @override
+  _SliderDraggerState createState() => _SliderDraggerState();
+}
+
+class _SliderDraggerState extends State<SliderDragger> {
+  double sliderPercent;
   double startDragY;
   double startDragPercent;
+
+  @override
+  void initState() {
+    super.initState();
+    sliderPercent = widget.initialSliderPercent;
+  }
 
   void _onPanStart(DragStartDetails details) {
     startDragY = details.globalPosition.dy;
@@ -110,17 +222,15 @@ class SpringSliderState extends State<SpringSlider> {
     final dragDistance = startDragY - details.globalPosition.dy;
     final sliderHeight = context.size.height;
     final dragPercent = dragDistance / sliderHeight;
-
-    setState(() {
-      sliderPercent = startDragPercent + dragPercent;
-    });
+    sliderPercent = startDragPercent + dragPercent;
+    if (widget.onSliderChange != null) {
+      widget.onSliderChange(sliderPercent);
+    }
   }
 
   void _onPanEnd(DragEndDetails details) {
-    setState(() {
-      startDragY = null;
-      startDragPercent = null;
-    });
+    startDragY = null;
+    startDragPercent = null;
   }
 
   @override
@@ -129,91 +239,28 @@ class SpringSliderState extends State<SpringSlider> {
       onPanStart: _onPanStart,
       onPanUpdate: _onPanUpdate,
       onPanEnd: _onPanEnd,
-      child: new Stack(
-        children: <Widget>[
-          new SliderMarks(
-              markCount: widget.markCount,
-              color: widget.positiveColor,
-              paddingTop: paddingTop,
-              paddingBottom: paddingBottom),
-          // 用ClipPath强制把它移下去（sets what part of an element should be shown）
-          new ClipPath(
-            clipper: new SliderClipper(
-                sliderPercent: sliderPercent,
-                paddingBottom: paddingBottom,
-                paddingTop: paddingTop),
-            child: new Stack(
-              children: <Widget>[
-                new Container(
-                  color: widget.positiveColor,
-                ),
-                new SliderMarks(
-                    markCount: widget.markCount,
-                    color: widget.negativeColor,
-                    paddingTop: paddingTop,
-                    paddingBottom: paddingBottom),
-              ],
-            ),
-          ),
+      child: widget.child,
+    );
+  }
+}
 
-          /// slider的文字
-          new Padding(
-            padding: EdgeInsets.only(top: 0.0, bottom: 0.0),
-            /* 这个行不通
-            child: new Stack(
-              children: <Widget>[
-                new Positioned(
-                  left: 30.0,
-                  top: MediaQuery.of(context).size.height / 2,
-                  child: new Text("Testing"),
-                ),
-                new Positioned(
-                  left: 30.0,
-                  top: MediaQuery.of(context).size.height / 2 + 50.0,
-                  child: new Text("Testing"),
-                )
-              ],
-            ),*/
+class SliderGoo extends StatelessWidget {
+  final double sliderPercent;
+  final double paddingTop;
+  final double paddingBottom;
+  final Widget child;
 
-            // LayoutBuilder的原因是要他里面的BoxConstraints,LayoutBuilder侦测的是他所在这个Widget的长宽高ganbade
-            child: new LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) {
-                final height = constraints.maxHeight;
-                final sliderY = height * (1.0 - sliderPercent);
-                final pointsYouNeed = (100 * (1.0 - sliderPercent)).round();
-                final pointsYouHave = 100 - pointsYouNeed;
+  const SliderGoo(
+      {this.sliderPercent, this.paddingTop, this.paddingBottom, this.child});
 
-                return new Stack(
-                  children: <Widget>[
-                    new Positioned(
-                      left: 30.0,
-                      top: sliderY - 50.0,
-                      child: FractionalTranslation(
-                          translation: Offset(0.0, -1.0),
-                          child: new Points(
-                            points: pointsYouNeed,
-                            isAboveSlider: true,
-                            isPointsYouNeed: true,
-                            color: Theme.of(context).primaryColor,
-                          )),
-                    ),
-                    new Positioned(
-                      left: 30.0,
-                      top: sliderY + 50.0,
-                      child: new Points(
-                        points: pointsYouHave,
-                        isAboveSlider: false,
-                        isPointsYouNeed: false,
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          )
-        ],
-      ),
+  @override
+  Widget build(BuildContext context) {
+    return new ClipPath(
+      clipper: new SliderClipper(
+          sliderPercent: sliderPercent,
+          paddingBottom: paddingBottom,
+          paddingTop: paddingTop),
+      child: child,
     );
   }
 }
@@ -249,19 +296,25 @@ class SliderClipper extends CustomClipper<Path> {
 
 class SliderMarks extends StatelessWidget {
   final int markCount;
-  final Color color;
+  final Color markColor;
+  final Color backgroundColor;
   final double paddingTop;
   final double paddingBottom;
 
   SliderMarks(
-      {this.markCount, this.color, this.paddingTop, this.paddingBottom});
+      {this.markCount,
+      this.markColor,
+      this.paddingTop,
+      this.paddingBottom,
+      this.backgroundColor});
 
   @override
   Widget build(BuildContext context) {
     return new CustomPaint(
       painter: new SliderMarksPainter(
           markCount: markCount,
-          color: color,
+          markColor: markColor,
+          backgroundColor: backgroundColor,
           markThickness: 2.0,
           paddingTop: paddingTop,
           paddingBottom: paddingBottom,
@@ -274,30 +327,37 @@ class SliderMarks extends StatelessWidget {
 class SliderMarksPainter extends CustomPainter {
   final double largeMarkWidth = 30.0;
   final double smallMarkWidth = 10.0;
-
   final int markCount;
-  final Color color;
+  final Color backgroundColor;
+  final Color markColor;
   final double markThickness;
   final double paddingTop;
   final double paddingBottom;
   final double paddingRight;
   final Paint markPaint;
+  final Paint backgroundPaint;
 
   SliderMarksPainter(
       {this.markCount,
-      this.color,
+      this.markColor,
+      this.backgroundColor,
       this.markThickness,
       this.paddingTop,
       this.paddingBottom,
       this.paddingRight})
       : markPaint = new Paint()
-          ..color = color
+          ..color = markColor
           ..strokeWidth = markThickness
           ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round;
+          ..strokeCap = StrokeCap.round,
+        backgroundPaint = new Paint()
+          ..color = backgroundColor
+          ..style = PaintingStyle.fill;
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+        Rect.fromLTWH(0.0, 0.0, size.width, size.height), backgroundPaint);
     final paintHeight = size.height - paddingTop - paddingBottom;
     final gap = paintHeight / (markCount - 1);
 
